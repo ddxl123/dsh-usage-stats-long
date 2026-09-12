@@ -1,0 +1,87 @@
+{
+  "name": "dsh-usage-stats-long",
+  "version": "0.1.0",
+  "description": "Accurate provider-reported token usage statistics for DeepSeek Harness: detailed breakdowns, session/model/project filters, model tools, CLI and an interactive dashboard.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "token",
+    "usage",
+    "statistics",
+    "billing"
+  ],
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "bin": {
+    "dsh-usage-stats": "bin/dsh-usage-stats.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./host": {
+      "types": "./lib/host/index.d.ts",
+      "default": "./lib/host/index.js"
+    },
+    "./host/tool": {
+      "types": "./lib/host/tool.d.ts",
+      "default": "./lib/host/tool.js"
+    },
+    "./core": {
+      "types": "./lib/core/index.d.ts",
+      "default": "./lib/core/index.js"
+    },
+    "./cli": "./lib/cli/index.js",
+    "./mcp": "./lib/mcp/server.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "bin",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/",
+    "lint": "node --check bin/dsh-usage-stats.js && node scripts/check-syntax.js",
+    "stats": "node bin/dsh-usage-stats.js summary",
+    "dashboard": "node bin/dsh-usage-stats.js dashboard --out usage-dashboard.html"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ddxl123/dsh-usage-stats-long.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ddxl123/dsh-usage-stats-long/issues"
+  },
+  "homepage": "https://github.com/ddxl123/dsh-usage-stats-long#readme"
+}

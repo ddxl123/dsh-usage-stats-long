@@ -1,0 +1,16 @@
+{
+  "$comment": "Example price book. Rates are USD per MILLION tokens. Keys are matched most-specific first: 'provider/model', then 'model', then '*'. Copy this file, replace the rates with the ones you actually pay, and pass it with --prices or config.priceBookPath. The shipped default is an empty book: costs are omitted, never guessed.",
+  "prices": {
+    "example-provider/example-model": {
+      "input": 0.27,
+      "output": 1.1,
+      "cacheRead": 0.027,
+      "cacheWrite": 0.27
+    },
+    "*": {
+      "input": 1.0,
+      "output": 2.0,
+      "cacheRead": 0.1
+    }
+  }
+}

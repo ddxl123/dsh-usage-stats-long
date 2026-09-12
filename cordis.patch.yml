@@ -1,0 +1,26 @@
+# The dsh-usage-stats-long bundle patch.
+#
+# Applied after @deepseek-ai/dsh-base, this layer inserts one host row that
+# provides the `usageStats` service and registers the `usage_stats`,
+# `usage_sessions` and `usage_calls` tools.
+#
+# The row is host-plane, not preset-plane: it reads the shared session corpus
+# and owns no per-agent state, so every session sees one consistent answer and
+# the fold cache is shared instead of rebuilt per agent.
+#
+# Every value below is overridable from a later layer (`$DSH_HOME/cordis.patch.yml`
+# or a `--patch` overlay); a patch replaces a row's whole `config`, so restate
+# every key you need.
+
+- insert:
+    - id: usage-stats
+      name: 'dsh-usage-stats-long'
+      config:
+        # Empty means "$DSH_HOME/sessions", resolved by the plugin at load time.
+        sessionsRoot: ''
+        # Point this at a JSON price book to enable cost columns. Empty means
+        # costs are omitted rather than guessed.
+        priceBookPath: ''
+        # Folded sessions retained between queries, keyed by path+size+mtime.
+        cacheSize: 256
+        registerTools: true

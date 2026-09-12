@@ -1,0 +1,12 @@
+node_modules/
+*.log
+*.tgz
+.DS_Store
+
+# Local artifacts: generated reports, dashboards and price books are the user's
+# data, never the repository's.
+usage-dashboard.html
+usage.json
+prices.json
+coverage/
+.nyc_output/
