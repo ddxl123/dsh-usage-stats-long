@@ -151,6 +151,17 @@ Global flags: `--sessions-root`, `--prices`, `--detail`, `--granularity`,
 
 ### Web page
 
+> Requires a harness restart: the route is registered when the plugin loads, and
+> a process started before the install does not have it.
+
+Once restarted, check it from a shell:
+
+```sh
+curl -sI http://127.0.0.1:3080/usage | head -5           # expect 200 and a CSP header
+curl -s  "http://127.0.0.1:3080/usage?view=text" | head   # plain-text report
+```
+
+
 With `webRoute: true` (the default) the plugin serves the same dashboard from
 the harness's own webserver, so it is one URL away with nothing to generate:
 

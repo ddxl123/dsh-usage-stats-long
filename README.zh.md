@@ -129,6 +129,16 @@ dsh-usage-stats filters --since 7d               # 打印解析后的筛选条�
 
 ### 网页端
 
+> 需要重启 Harness 才会生效：路由是插件加载时注册的，当前正在运行的进程是在装插件之前启动的。
+
+重启后可以这样自测：
+
+```sh
+curl -sI http://127.0.0.1:3080/usage | head -5          # 应看到 200 与 CSP 头
+curl -s  "http://127.0.0.1:3080/usage?view=text" | head  # 纯文本报告
+```
+
+
 `webRoute: true`（默认开启）时，插件会把同一份看板挂在 Harness 自己的 webserver 上，打开即用，不需要先生成文件：
 
 ```
