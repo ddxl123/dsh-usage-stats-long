@@ -157,6 +157,11 @@ the call ledger, the text report, and diagnostics — with date / model / projec
 kind / text filters, sortable columns, click-to-expand per-turn detail for any
 session, and a JSON export of whatever is currently filtered.
 
+[`usage-dashboard.example.html`](usage-dashboard.example.html) is a real one,
+built from an 80-session corpus, so you can open the artifact before generating
+your own. It embeds only the twelve heaviest sessions to stay small; a full run
+includes every session and every call (about 3.5 MB for that corpus).
+
 ### Costs
 
 Prices change and differ per route, so none are shipped:
