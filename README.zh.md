@@ -75,7 +75,20 @@ dsh --profile web
 
 可以在 `$DSH_HOME/cordis.patch.yml` 或 `--patch` 覆盖层中改这些值；patch 会替换整行 `config`，因此需要重述你需要的每一个键。
 
-**环境要求。** Node ≥ 22.15（引擎需要解码 zstd）。以下二者之一：`PATH` 中有 `zstd` 命令（最快，推荐），或者什么都不装——内置的逐帧解码器是纯 Node 实现。`@deepseek-ai/cordis` 与 `@deepseek-ai/dsh-tools` 来自你的 Harness 安装，它们是 peer 依赖，不会被重复打包。
+**环境要求。** Node ≥ 22.15（引擎需要解码 zstd）。以下二者之一：`PATH` 中有 `zstd` 命令（最快，推荐），或者什么都不装——内置的逐帧解码器是纯 Node 实现。
+
+`@deepseek-ai/cordis`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-tools` 是 **peer 依赖**，属于你的 Harness 安装，不会被打包。它们必须**能从本包自己的目录解析到**——这和「装在你的 profile 里」是两件不同的事：
+
+> Node 解析包的裸导入时用的是它的**真实路径**（会跟随软链）。`dsh` 把树外插件链在 `<profile>/node_modules/<name>`，并维护 `profiles/node_modules/@deepseek-ai/*` 作为 fallback；但从插件的真实目录出发解析时，向上找的是**那棵**目录树，两个都看不到。于是插件加载会直接失败：`Cannot find package '@deepseek-ai/cordis'`。
+
+包里的 `prepare` 脚本会自动建立这些链接，所以从 git 或 npm 安装不需要你做什么。而 `link:` 安装 pnpm 不会执行脚本，手动跑一次即可：
+
+```sh
+node scripts/link-harness-deps.mjs              # 自动寻找你的 Harness
+node scripts/link-harness-deps.mjs --from /path/to/node_modules
+```
+
+peer 已能解析时它会静默成功退出，所以可以反复运行，你的部署若用别的方式解析也可以完全忽略它。
 
 ## 使用
 

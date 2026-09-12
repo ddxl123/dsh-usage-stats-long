@@ -58,7 +58,9 @@
     "test": "node --test test/",
     "lint": "node --check bin/dsh-usage-stats.js && node scripts/check-syntax.js",
     "stats": "node bin/dsh-usage-stats.js summary",
-    "dashboard": "node bin/dsh-usage-stats.js dashboard --out usage-dashboard.html"
+    "dashboard": "node bin/dsh-usage-stats.js dashboard --out usage-dashboard.html",
+    "prepare": "node scripts/link-harness-deps.mjs",
+    "link-deps": "node scripts/link-harness-deps.mjs"
   },
   "dsh": {
     "bundle": {

@@ -94,8 +94,30 @@ patch replaces a row's whole `config`, so restate every key you need.
 
 **Requirements.** Node ≥ 22.15 (the engine decodes zstd). One of: the `zstd` CLI
 on `PATH` (fastest, recommended), or nothing at all — the built-in frame-by-frame
-decoder is pure Node. `@deepseek-ai/cordis` and `@deepseek-ai/dsh-tools` come
-from your harness installation; they are peer dependencies, not bundled.
+decoder is pure Node.
+
+`@deepseek-ai/cordis`, `@deepseek-ai/schemastery` and `@deepseek-ai/dsh-tools`
+are **peer dependencies**: they belong to your harness installation and are not
+bundled. They must be resolvable *from this package's own directory*, which is
+subtly different from being installed in your profile:
+
+> Node resolves a package's bare imports from its **real** path, following
+> symlinks. `dsh` links an out-of-tree plugin at `<profile>/node_modules/<name>`
+> and maintains `profiles/node_modules/@deepseek-ai/*` as a fallback, but
+> resolution from the plugin's real directory walks up *that* tree instead and
+> never sees either. Without the peers resolvable locally the plugin fails to
+> load with `Cannot find package '@deepseek-ai/cordis'`.
+
+The bundled `prepare` script establishes them, so a git or npm install needs
+nothing from you. For a `link:` install pnpm runs no scripts, so run it once:
+
+```sh
+node scripts/link-harness-deps.mjs              # finds your harness automatically
+node scripts/link-harness-deps.mjs --from /path/to/node_modules
+```
+
+It exits successfully and silently when the peers already resolve, so it is safe
+to re-run and safe to ignore when your deployment resolves them another way.
 
 ## Use
 
