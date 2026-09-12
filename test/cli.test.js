@@ -213,6 +213,20 @@ describe('other commands', () => {
     assert.match(result.err, /needs --out/)
   })
 
+  it('writes a dashboard that embeds the corpus and honors --max-sessions', async () => {
+    const out = join(root, 'dashboard.html')
+    const result = await cli(['dashboard', '--out', out, '--max-sessions', '2'])
+    assert.equal(result.code, 0)
+    const html = readFileSync(out, 'utf8')
+    assert.ok(html.startsWith('<!doctype html>'))
+    const payload = JSON.parse(
+      /<script type="application\/json" id="dsh-usage-data">([\s\S]*?)<\/script>/.exec(html)[1]
+        .replace(/\\u003c/g, '<').replace(/\\u003e/g, '>').replace(/\\u0026/g, '&'),
+    )
+    assert.equal(payload.report.sessions.length, 2, '--max-sessions must reach the embedded payload')
+    assert.ok(payload.report.sessions.every((session) => session.callDetails.length > 0), 'call rows must be retained for the drill-down')
+  })
+
   it('rejects an unknown command', async () => {
     const result = await cli(['frobnicate'])
     assert.equal(result.code, 2)
