@@ -66,8 +66,10 @@ dsh --profile web
     priceBookPath: ''     # 用于费用列的 JSON 价格表
     cacheSize: 256        # 两次查询之间保留的已折叠会话数
     registerTools: true
-    webRoute: true        # 在 Harness 的 webserver 上提供 /usage
-    webPath: '/usage'
+    web: true             # 启动插件自带的看板服务
+    webHost: '127.0.0.1'
+    webPort: 3090         # 0 表示由系统分配；被占用时依次往后试
+    webPortAttempts: 10
     webTtlMs: 10000       # 渲染结果的复用时长
 ```
 
@@ -129,27 +131,24 @@ dsh-usage-stats filters --since 7d               # 打印解析后的筛选条�
 
 ### 网页端
 
-> 需要重启 Harness 才会生效：路由是插件加载时注册的，当前正在运行的进程是在装插件之前启动的。
-
-重启后可以这样自测：
-
-```sh
-curl -sI http://127.0.0.1:3080/usage | head -5          # 应看到 200 与 CSP 头
-curl -s  "http://127.0.0.1:3080/usage?view=text" | head  # 纯文本报告
-```
-
-
-`webRoute: true`（默认开启）时，插件会把同一份看板挂在 Harness 自己的 webserver 上，打开即用，不需要先生成文件：
+插件会**随 dsh 一起启动一个自己的看板服务**，页面就在它上面：
 
 ```
-http://127.0.0.1:3080/usage            # 交互式看板
-http://127.0.0.1:3080/usage?lang=zh    # 中文界面
-http://127.0.0.1:3080/usage?view=text  # 纯文本报告
+http://127.0.0.1:3090/                 # 交互式看板
+http://127.0.0.1:3090/?lang=zh         # 中文界面
+http://127.0.0.1:3090/?view=text       # 纯文本报告
+http://127.0.0.1:3090/report.json      # 整份报告 JSON
+http://127.0.0.1:3090/healthz          # 存活探针 + 引擎状态
 ```
 
-页面最多每 `webTtlMs`（默认 10 秒）从语料重建一次，所以刷新就能看到新轮次，而语料没变时重复打开就是缓存命中。可以用 `webPath` 改路径，或用 `webRoute: false` 关掉。
+之所以自己监听，而不是挂在 Harness 的 webserver 上：`ctx.webServer` 每个 context 只允许一个实现，而随附的 Web 组合已经占用了它；自己监听还让页面在完全没有 webserver 的部署里也能用。
 
-这里用的是宿主路由，而不是 `dsh.client` 客户端插件包，这是有意的：客户端插件必须是预构建的 CJS 工厂，要通过客户端模块表解析 `@deepseek-ai/dsh-client-ui-slots`、`react` 这类内部模块 id，而这些并不是公开的插件编写契约——手写一个等于把包钉死在今天的内部 id 上。`ctx.webServer.register` 是有文档的宿主扩展点，没有这种耦合。
+几个实践中要紧的点：
+
+- **端口**：先试 `webPort`（默认 3090），被占用就依次往后试，所以开第二个 Harness 会得到自己的页面，而不是插件加载失败。设 `webPort: 0` 让系统随便挑。
+- **绑定地址**：默认只听回环，页面不会意外暴露。`webHost: '0.0.0.0'` 可让局域网访问。
+- **新鲜度**：渲染结果在 `webTtlMs`（默认 10 秒）内复用，所以刷新能看到新轮次，语料没变时就是缓存命中。
+- **起不来不算故障**：端口占满只是少一个页面，工具和 CLI 照常工作，原因会通过 `status()` 和 `GET /healthz` 报出来。
 
 ### 看板文件
 

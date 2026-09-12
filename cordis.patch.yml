@@ -24,10 +24,16 @@
         # Folded sessions retained between queries, keyed by path+size+mtime.
         cacheSize: 256
         registerTools: true
-        # Serve the interactive dashboard on this deployment's own webserver.
-        # Set webRoute: false to turn the page off, or move it with webPath.
-        webRoute: true
-        webPath: '/usage'
+        # The plugin starts its own dashboard server with the harness, on its
+        # own port, so the page does not depend on the harness webserver at all.
+        # Set web: false to disable it.
+        web: true
+        # Loopback by default: the page is never exposed by accident.
+        webHost: '127.0.0.1'
+        # First port to try. If it is taken the next few are tried in turn, so a
+        # second harness gets its own page instead of a failed plugin.
+        webPort: 3090
+        webPortAttempts: 10
         # How long a rendered page is reused before it is rebuilt. The corpus
         # changes only when a turn is appended, so this is what makes a refresh
         # a cache hit while the page stays live.

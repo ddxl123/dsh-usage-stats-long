@@ -243,112 +243,184 @@ describe('usageStats service behavior', { skip: skipReason ?? false }, () => {
   })
 })
 
-describe('dashboard web route', { skip: skipReason ?? false }, () => {
+describe('standalone dashboard server', { skip: skipReason ?? false }, () => {
   /** @type {string} */
   let root
   /** @type {any} */
   let usageStats
   /** @type {any} */
-  let registeredRoute
+  let server
 
   before(async () => {
-    root = makeTempRoot('dsh-web-test-')
+    root = makeTempRoot('dsh-server-test-')
     writeCorpus(root)
-    const [{ UsageStatsService }, { registerDashboardRoute }] = await Promise.all([
+    const [{ UsageStatsService }, { startDashboardServer }] = await Promise.all([
       import('../lib/host/service.js'),
-      import('../lib/host/web.js'),
+      import('../lib/host/server.js'),
     ])
-    const context = new Context()
-    usageStats = new UsageStatsService(context, { sessionsRoot: root })
-    // A webserver stand-in: the route contract is kind + path + handler.
-    const webServer = {
-      register(route) {
-        registeredRoute = route
-        return () => { registeredRoute = undefined }
-      },
-    }
-    const pluginCtx = { get: (name) => (name === 'webServer' ? webServer : undefined) }
-    registerDashboardRoute(pluginCtx, usageStats, { path: '/usage', ttlMs: 0 })
+    usageStats = new UsageStatsService(new Context(), { sessionsRoot: root })
+    // Port 0 binds whatever the OS has free, so the suite never collides with a
+    // real harness or a parallel test run.
+    server = await startDashboardServer(usageStats, { port: 0, ttlMs: 0, status: () => usageStats.status() })
   })
 
-  after(() => {
+  after(async () => {
+    await server?.close()
     rmSync(root, { recursive: true, force: true })
   })
 
-  it('registers a prefix route at the configured path', () => {
-    assert.equal(registeredRoute.kind, 'prefix')
-    assert.equal(registeredRoute.path, '/usage')
+  /**
+   * Fetch from the server under test.
+   *
+   * @param {string} path request path.
+   * @returns {Promise<{ status: number, headers: Headers, body: string }>} the response.
+   */
+  async function get(path) {
+    const response = await fetch(`http://127.0.0.1:${server.port}${path}`)
+    return { status: response.status, headers: response.headers, body: await response.text() }
+  }
+
+  it('binds a real port and reports its own URL', () => {
+    assert.ok(server.port > 0)
+    assert.equal(server.host, '127.0.0.1')
+    assert.equal(server.url, `http://127.0.0.1:${server.port}/`)
   })
 
-  it('answers the root path with a self-contained dashboard', async () => {
-    const response = makeResponse()
-    await registeredRoute.handler({ url: '/usage', method: 'GET' }, response)
+  it('serves the dashboard at the root', async () => {
+    const response = await get('/')
     assert.equal(response.status, 200)
-    assert.match(response.headers['content-type'], /text\/html/)
-    assert.match(response.headers['content-security-policy'], /default-src 'none'/)
+    assert.match(response.headers.get('content-type'), /text\/html/)
+    assert.match(response.headers.get('content-security-policy'), /default-src 'none'/)
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff')
     assert.ok(response.body.startsWith('<!doctype html>'))
-    assert.ok(response.body.includes('dsh-usage-data'), 'the payload element must be present')
-    assert.ok(!/<script[^>]+src=/.test(response.body), 'no external script may be required')
+    assert.ok(response.body.includes('dsh-usage-data'))
+    assert.ok(!/<script[^>]+src=/.test(response.body), 'the page must need no external script')
   })
 
-  it('serves a plain-text view on request', async () => {
-    const response = makeResponse()
-    await registeredRoute.handler({ url: '/usage?view=text', method: 'GET' }, response)
-    assert.equal(response.status, 200)
-    assert.ok(response.body.includes('Token usage report'))
-    assert.ok(response.body.includes('<pre>'))
+  it('embeds the whole corpus, per-call rows included', async () => {
+    const response = await get('/')
+    const payload = JSON.parse(
+      /<script type="application\/json" id="dsh-usage-data">([\s\S]*?)<\/script>/.exec(response.body)[1]
+        .replace(/\\u003c/g, '<').replace(/\\u003e/g, '>').replace(/\\u0026/g, '&'),
+    )
+    const embeddedCalls = payload.report.sessions.reduce((sum, session) => sum + session.callDetails.length, 0)
+    assert.equal(embeddedCalls, 9, 'every billed call must be available to the drill-down')
+    assert.equal(payload.report.totals.totalTokens, 1744)
   })
 
-  it('localizes the document', async () => {
-    const response = makeResponse()
-    await registeredRoute.handler({ url: '/usage?lang=zh', method: 'GET' }, response)
-    assert.equal(response.status, 200)
-    assert.ok(response.body.includes('lang="zh"'))
+  it('serves the plain-text view and the Chinese document', async () => {
+    const text = await get('/?view=text')
+    assert.equal(text.status, 200)
+    assert.ok(text.body.includes('Token usage report'))
+    assert.ok(text.body.includes('<pre>'))
+
+    const chinese = await get('/?lang=zh')
+    assert.ok(chinese.body.includes('lang="zh"'))
+    assert.ok(chinese.body.includes('DSH Token 用量看板'))
   })
 
-  it('404s a nested path instead of serving the page for it', async () => {
-    const response = makeResponse()
-    await registeredRoute.handler({ url: '/usage/anything', method: 'GET' }, response)
+  it('exposes a health endpoint and a JSON report', async () => {
+    const health = await get('/healthz')
+    assert.equal(health.status, 200)
+    const parsed = JSON.parse(health.body)
+    assert.equal(parsed.ok, true)
+    assert.equal(parsed.port, server.port)
+    assert.equal(typeof parsed.sessionsRoot, 'string')
+
+    const json = await get('/report.json')
+    assert.equal(json.status, 200)
+    const report = JSON.parse(json.body)
+    assert.equal(report.totals.totalTokens, 1744)
+    assert.equal(report.summary.calls, 9)
+  })
+
+  it('404s anything else instead of serving the page for it', async () => {
+    const response = await get('/anything-else')
     assert.equal(response.status, 404)
   })
 
-  it('reports a broken corpus as a page rather than crashing the server', async () => {
-    const { UsageStatsService } = await import('../lib/host/service.js')
-    const { registerDashboardRoute } = await import('../lib/host/web.js')
-    const broken = new UsageStatsService(new Context(), { sessionsRoot: '/definitely/not/here' })
-    let route
-    registerDashboardRoute({ get: (name) => (name === 'webServer' ? { register: (r) => { route = r; return () => {} } } : undefined) }, broken, { ttlMs: 0 })
-    const response = makeResponse()
-    await route.handler({ url: '/usage', method: 'GET' }, response)
-    // An empty corpus is not an error: the dashboard renders its empty state.
-    assert.equal(response.status, 200)
-    assert.ok(response.body.includes('<!doctype html>'))
+  it('reuses a rendered page, then rebuilds it after the window', async () => {
+    const { startDashboardServer } = await import('../lib/host/server.js')
+    const shortLived = await startDashboardServer(usageStats, { port: 0, ttlMs: 60_000 })
+    try {
+      const first = await fetch(`http://127.0.0.1:${shortLived.port}/`).then((response) => response.text())
+      const second = await fetch(`http://127.0.0.1:${shortLived.port}/`).then((response) => response.text())
+      assert.equal(second, first)
+    } finally {
+      await shortLived.close()
+    }
   })
 
-  it('does nothing when the deployment has no webserver', async () => {
-    const { registerDashboardRoute } = await import('../lib/host/web.js')
-    const result = registerDashboardRoute({ get: () => undefined }, usageStats)
-    assert.equal(result, undefined, 'a headless deployment must not fail to load')
+  it('steps to the next port when the first is taken', async () => {
+    const { startDashboardServer } = await import('../lib/host/server.js')
+    const { createServer } = await import('node:http')
+    const blocker = createServer()
+    const { promise: blocked, resolve: blockedReady } = Promise.withResolvers()
+    blocker.listen(0, '127.0.0.1', blockedReady)
+    await blocked
+    const taken = blocker.address().port
+    try {
+      const second = await startDashboardServer(usageStats, { port: taken, portAttempts: 20 })
+      try {
+        assert.notEqual(second.port, taken, 'a busy port must not fail the plugin')
+        assert.ok(second.port > taken, 'the next candidate port is tried')
+        const response = await fetch(`http://127.0.0.1:${second.port}/healthz`)
+        assert.equal(response.status, 200)
+      } finally {
+        await second.close()
+      }
+    } finally {
+      blocker.close()
+    }
+  })
+
+  it('reports a failure instead of throwing when every candidate port is taken', async () => {
+    const { startDashboardServer } = await import('../lib/host/server.js')
+    const { createServer } = await import('node:http')
+    // Occupy a port deliberately rather than borrowing one from another test, so
+    // this case is independent of execution order and of what else is running.
+    const blocker = createServer()
+    const { promise: blocked, resolve: blockedReady } = Promise.withResolvers()
+    blocker.listen(0, '127.0.0.1', blockedReady)
+    await blocked
+    const taken = blocker.address().port
+    try {
+      // A single-attempt window on an occupied port must reject with a reason the
+      // plugin can record, not crash the composition.
+      await assert.rejects(
+        () => startDashboardServer(usageStats, { port: taken, portAttempts: 1 }),
+        /no free port in \d+\.\.\d+ on 127\.0\.0\.1/,
+      )
+      // And the failed attempt must not leave a handle behind.
+      const rebound = await startDashboardServer(usageStats, { port: taken + 1 })
+      await rebound.close()
+    } finally {
+      blocker.close()
+    }
+  })
+
+  it('closes cleanly, releasing the port', async () => {
+    const { startDashboardServer } = await import('../lib/host/server.js')
+    const temporary = await startDashboardServer(usageStats, { port: 0 })
+    const port = temporary.port
+    await temporary.close()
+    // A closed server must free its port, or a config reload could not rebind it.
+    const rebound = await startDashboardServer(usageStats, { port })
+    await rebound.close()
+  })
+
+  it('renders its empty state for a corpus with no usage', async () => {
+    const { UsageStatsService } = await import('../lib/host/service.js')
+    const { startDashboardServer } = await import('../lib/host/server.js')
+    const emptyRoot = makeTempRoot('dsh-server-empty-')
+    try {
+      const empty = await startDashboardServer(new UsageStatsService(new Context(), { sessionsRoot: emptyRoot }), { port: 0 })
+      const response = await fetch(`http://127.0.0.1:${empty.port}/`)
+      assert.equal(response.status, 200)
+      assert.ok((await response.text()).includes('<!doctype html>'))
+      await empty.close()
+    } finally {
+      rmSync(emptyRoot, { recursive: true, force: true })
+    }
   })
 })
-
-/**
- * Build a minimal ServerResponse stand-in that records what was written.
- *
- * @returns {any} the stand-in response.
- */
-function makeResponse() {
-  return {
-    status: 0,
-    headers: {},
-    body: '',
-    writeHead(status, headers) {
-      this.status = status
-      this.headers = headers ?? {}
-      return this
-    },
-    end(chunk) {
-      this.body += chunk === undefined ? '' : String(chunk)
-    },
-  }
-}

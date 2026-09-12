@@ -82,8 +82,10 @@ The bundle inserts one host-plane row:
     priceBookPath: ''     # JSON price book for cost columns
     cacheSize: 256        # folded sessions retained between queries
     registerTools: true
-    webRoute: true        # serve /usage on the harness webserver
-    webPath: '/usage'
+    web: true             # start the plugin's own dashboard server
+    webHost: '127.0.0.1'
+    webPort: 3090         # 0 lets the OS pick; the next ports are tried if taken
+    webPortAttempts: 10
     webTtlMs: 10000       # reuse a rendered page for this long
 ```
 
@@ -151,36 +153,34 @@ Global flags: `--sessions-root`, `--prices`, `--detail`, `--granularity`,
 
 ### Web page
 
-> Requires a harness restart: the route is registered when the plugin loads, and
-> a process started before the install does not have it.
-
-Once restarted, check it from a shell:
-
-```sh
-curl -sI http://127.0.0.1:3080/usage | head -5           # expect 200 and a CSP header
-curl -s  "http://127.0.0.1:3080/usage?view=text" | head   # plain-text report
-```
-
-
-With `webRoute: true` (the default) the plugin serves the same dashboard from
-the harness's own webserver, so it is one URL away with nothing to generate:
+The plugin starts **its own dashboard server together with the harness** and
+serves the report there:
 
 ```
-http://127.0.0.1:3080/usage            # the interactive dashboard
-http://127.0.0.1:3080/usage?lang=zh    # Chinese labels
-http://127.0.0.1:3080/usage?view=text  # the plain-text report
+http://127.0.0.1:3090/                 # interactive dashboard
+http://127.0.0.1:3090/?lang=zh         # Chinese labels
+http://127.0.0.1:3090/?view=text       # plain-text report
+http://127.0.0.1:3090/report.json      # the whole report as JSON
+http://127.0.0.1:3090/healthz          # liveness plus engine state
 ```
 
-The page is rebuilt from the corpus at most once every `webTtlMs` (10s by
-default), so a refresh picks up new turns while a reload of an unchanged corpus
-is a cache hit. Move it with `webPath`, or turn it off with `webRoute: false`.
+It is a listener of its own rather than a route on the harness webserver, for
+two reasons: `ctx.webServer` is a single implementation per context and the
+shipped Web composition already owns it, and this way the page also exists in a
+deployment that mounts no webserver at all.
 
-This is a host route rather than a `dsh.client` plugin bundle, and that is
-deliberate: a client bundle must be a pre-built CJS factory resolving internal
-module ids such as `@deepseek-ai/dsh-client-ui-slots` and `react` through the
-client module table, and those are not a published authoring contract — hand
-writing one would pin the bundle to today's internal ids. `ctx.webServer.register`
-is a documented host extension point with no such coupling.
+Details that matter in practice:
+
+- **Port.** `webPort` is tried first (3090 by default) and the next few are tried
+  in turn, so a second harness gets its own page instead of a failed plugin. Set
+  `webPort: 0` to let the OS pick.
+- **Bind address.** Loopback by default: the page is never exposed by accident.
+  `webHost: '0.0.0.0'` makes it reachable from your LAN.
+- **Freshness.** A rendered page is reused for `webTtlMs` (10s by default), so a
+  refresh picks up new turns while an unchanged corpus is a cache hit.
+- **Failure is not fatal.** An unavailable port degrades one page; every tool
+  and the CLI keep working, and the reason is reported through `status()` and
+  `GET /healthz`.
 
 ### Dashboard file
 
