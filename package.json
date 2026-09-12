@@ -47,7 +47,9 @@
   "files": [
     "lib",
     "bin",
+    "scripts",
     "cordis.patch.yml",
+    "prices.example.json",
     "README.md",
     "README.zh.md",
     "LICENSE"
