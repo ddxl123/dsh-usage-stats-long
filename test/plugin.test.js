@@ -242,3 +242,113 @@ describe('usageStats service behavior', { skip: skipReason ?? false }, () => {
     assert.ok(report.totals.totalTokens > 0, 'usage must still be reported')
   })
 })
+
+describe('dashboard web route', { skip: skipReason ?? false }, () => {
+  /** @type {string} */
+  let root
+  /** @type {any} */
+  let usageStats
+  /** @type {any} */
+  let registeredRoute
+
+  before(async () => {
+    root = makeTempRoot('dsh-web-test-')
+    writeCorpus(root)
+    const [{ UsageStatsService }, { registerDashboardRoute }] = await Promise.all([
+      import('../lib/host/service.js'),
+      import('../lib/host/web.js'),
+    ])
+    const context = new Context()
+    usageStats = new UsageStatsService(context, { sessionsRoot: root })
+    // A webserver stand-in: the route contract is kind + path + handler.
+    const webServer = {
+      register(route) {
+        registeredRoute = route
+        return () => { registeredRoute = undefined }
+      },
+    }
+    const pluginCtx = { get: (name) => (name === 'webServer' ? webServer : undefined) }
+    registerDashboardRoute(pluginCtx, usageStats, { path: '/usage', ttlMs: 0 })
+  })
+
+  after(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('registers a prefix route at the configured path', () => {
+    assert.equal(registeredRoute.kind, 'prefix')
+    assert.equal(registeredRoute.path, '/usage')
+  })
+
+  it('answers the root path with a self-contained dashboard', async () => {
+    const response = makeResponse()
+    await registeredRoute.handler({ url: '/usage', method: 'GET' }, response)
+    assert.equal(response.status, 200)
+    assert.match(response.headers['content-type'], /text\/html/)
+    assert.match(response.headers['content-security-policy'], /default-src 'none'/)
+    assert.ok(response.body.startsWith('<!doctype html>'))
+    assert.ok(response.body.includes('dsh-usage-data'), 'the payload element must be present')
+    assert.ok(!/<script[^>]+src=/.test(response.body), 'no external script may be required')
+  })
+
+  it('serves a plain-text view on request', async () => {
+    const response = makeResponse()
+    await registeredRoute.handler({ url: '/usage?view=text', method: 'GET' }, response)
+    assert.equal(response.status, 200)
+    assert.ok(response.body.includes('Token usage report'))
+    assert.ok(response.body.includes('<pre>'))
+  })
+
+  it('localizes the document', async () => {
+    const response = makeResponse()
+    await registeredRoute.handler({ url: '/usage?lang=zh', method: 'GET' }, response)
+    assert.equal(response.status, 200)
+    assert.ok(response.body.includes('lang="zh"'))
+  })
+
+  it('404s a nested path instead of serving the page for it', async () => {
+    const response = makeResponse()
+    await registeredRoute.handler({ url: '/usage/anything', method: 'GET' }, response)
+    assert.equal(response.status, 404)
+  })
+
+  it('reports a broken corpus as a page rather than crashing the server', async () => {
+    const { UsageStatsService } = await import('../lib/host/service.js')
+    const { registerDashboardRoute } = await import('../lib/host/web.js')
+    const broken = new UsageStatsService(new Context(), { sessionsRoot: '/definitely/not/here' })
+    let route
+    registerDashboardRoute({ get: (name) => (name === 'webServer' ? { register: (r) => { route = r; return () => {} } } : undefined) }, broken, { ttlMs: 0 })
+    const response = makeResponse()
+    await route.handler({ url: '/usage', method: 'GET' }, response)
+    // An empty corpus is not an error: the dashboard renders its empty state.
+    assert.equal(response.status, 200)
+    assert.ok(response.body.includes('<!doctype html>'))
+  })
+
+  it('does nothing when the deployment has no webserver', async () => {
+    const { registerDashboardRoute } = await import('../lib/host/web.js')
+    const result = registerDashboardRoute({ get: () => undefined }, usageStats)
+    assert.equal(result, undefined, 'a headless deployment must not fail to load')
+  })
+})
+
+/**
+ * Build a minimal ServerResponse stand-in that records what was written.
+ *
+ * @returns {any} the stand-in response.
+ */
+function makeResponse() {
+  return {
+    status: 0,
+    headers: {},
+    body: '',
+    writeHead(status, headers) {
+      this.status = status
+      this.headers = headers ?? {}
+      return this
+    },
+    end(chunk) {
+      this.body += chunk === undefined ? '' : String(chunk)
+    },
+  }
+}

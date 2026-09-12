@@ -66,6 +66,9 @@ dsh --profile web
     priceBookPath: ''     # 用于费用列的 JSON 价格表
     cacheSize: 256        # 两次查询之间保留的已折叠会话数
     registerTools: true
+    webRoute: true        # 在 Harness 的 webserver 上提供 /usage
+    webPath: '/usage'
+    webTtlMs: 10000       # 渲染结果的复用时长
 ```
 
 可以在 `$DSH_HOME/cordis.patch.yml` 或 `--patch` 覆盖层中改这些值；patch 会替换整行 `config`，因此需要重述你需要的每一个键。
@@ -124,7 +127,21 @@ dsh-usage-stats filters --since 7d               # 打印解析后的筛选条�
 
 全局参数：`--sessions-root`、`--prices`、`--detail`、`--granularity`、`--lang`、`--limit`、`--out`、`--json`、`--no-color`、`--quiet`、`--help`。
 
-### 看板
+### 网页端
+
+`webRoute: true`（默认开启）时，插件会把同一份看板挂在 Harness 自己的 webserver 上，打开即用，不需要先生成文件：
+
+```
+http://127.0.0.1:3080/usage            # 交互式看板
+http://127.0.0.1:3080/usage?lang=zh    # 中文界面
+http://127.0.0.1:3080/usage?view=text  # 纯文本报告
+```
+
+页面最多每 `webTtlMs`（默认 10 秒）从语料重建一次，所以刷新就能看到新轮次，而语料没变时重复打开就是缓存命中。可以用 `webPath` 改路径，或用 `webRoute: false` 关掉。
+
+这里用的是宿主路由，而不是 `dsh.client` 客户端插件包，这是有意的：客户端插件必须是预构建的 CJS 工厂，要通过客户端模块表解析 `@deepseek-ai/dsh-client-ui-slots`、`react` 这类内部模块 id，而这些并不是公开的插件编写契约——手写一个等于把包钉死在今天的内部 id 上。`ctx.webServer.register` 是有文档的宿主扩展点，没有这种耦合。
+
+### 看板文件
 
 `dsh-usage-stats dashboard --out usage.html` 写出**单个自包含 HTML 文件**：没有 CDN、不需要构建、写完之后不再访问网络。可以直接用 `file://` 打开，也可以提交进仓库或发给别人，离线可用。
 

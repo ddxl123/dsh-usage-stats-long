@@ -24,3 +24,11 @@
         # Folded sessions retained between queries, keyed by path+size+mtime.
         cacheSize: 256
         registerTools: true
+        # Serve the interactive dashboard on this deployment's own webserver.
+        # Set webRoute: false to turn the page off, or move it with webPath.
+        webRoute: true
+        webPath: '/usage'
+        # How long a rendered page is reused before it is rebuilt. The corpus
+        # changes only when a turn is appended, so this is what makes a refresh
+        # a cache hit while the page stays live.
+        webTtlMs: 10000

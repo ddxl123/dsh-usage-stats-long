@@ -3,6 +3,9 @@ node_modules/
 *.tgz
 .DS_Store
 
+# A scratch DSH_HOME used to boot a throwaway harness during development.
+.tmp-dsh-home/
+
 # Local artifacts: generated reports, dashboards and price books are the user's
 # data, never the repository's.
 usage-dashboard.html
