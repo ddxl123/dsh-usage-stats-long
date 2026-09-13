@@ -38,3 +38,6 @@
         # changes only when a turn is appended, so this is what makes a refresh
         # a cache hit while the page stays live.
         webTtlMs: 10000
+        # Default label language for the page. `?lang=en` / `?lang=zh` still
+        # override it per request, so both are always reachable.
+        webLang: 'zh'

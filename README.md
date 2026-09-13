@@ -87,6 +87,7 @@ The bundle inserts one host-plane row:
     webPort: 3090         # 0 lets the OS pick; the next ports are tried if taken
     webPortAttempts: 10
     webTtlMs: 10000       # reuse a rendered page for this long
+    webLang: 'zh'         # default page language; ?lang=en still overrides
 ```
 
 Override any of it from `$DSH_HOME/cordis.patch.yml` or a `--patch` overlay; a
@@ -180,11 +181,17 @@ serves the report there:
 
 ```
 http://127.0.0.1:3090/                 # interactive dashboard
-http://127.0.0.1:3090/?lang=zh         # Chinese labels
+http://127.0.0.1:3090/?lang=en         # English labels
 http://127.0.0.1:3090/?view=text       # plain-text report
 http://127.0.0.1:3090/report.json      # the whole report as JSON
 http://127.0.0.1:3090/healthz          # liveness plus engine state
 ```
+
+**The page is Chinese by default** (`webLang: 'zh'`), because the report labels,
+the time series and the drill-down all read more naturally in it. `?lang=en`
+switches a single request to English, and `webLang: 'en'` changes the default
+for a deployment; an unrecognized `?lang` value falls back to the configured
+default rather than rendering an unlabeled page.
 
 It is a listener of its own rather than a route on the harness webserver, for
 two reasons: `ctx.webServer` is a single implementation per context and the

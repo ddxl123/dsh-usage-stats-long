@@ -261,7 +261,9 @@ describe('standalone dashboard server', { skip: skipReason ?? false }, () => {
     usageStats = new UsageStatsService(new Context(), { sessionsRoot: root })
     // Port 0 binds whatever the OS has free, so the suite never collides with a
     // real harness or a parallel test run.
-    server = await startDashboardServer(usageStats, { port: 0, ttlMs: 0, status: () => usageStats.status() })
+    // `lang: 'zh'` mirrors the shipped default (config `webLang`), so these tests
+    // assert what a user actually sees rather than an English-only fallback.
+    server = await startDashboardServer(usageStats, { port: 0, ttlMs: 0, lang: 'zh', status: () => usageStats.status() })
   })
 
   after(async () => {
@@ -308,15 +310,39 @@ describe('standalone dashboard server', { skip: skipReason ?? false }, () => {
     assert.equal(payload.report.totals.totalTokens, 1744)
   })
 
-  it('serves the plain-text view and the Chinese document', async () => {
+  it('serves the plain-text view', async () => {
     const text = await get('/?view=text')
     assert.equal(text.status, 200)
-    assert.ok(text.body.includes('Token usage report'))
     assert.ok(text.body.includes('<pre>'))
+    assert.ok(text.body.includes('Token'))
+  })
 
-    const chinese = await get('/?lang=zh')
-    assert.ok(chinese.body.includes('lang="zh"'))
-    assert.ok(chinese.body.includes('DSH Token 用量看板'))
+  it('localizes the document, and the configured default is Chinese', async () => {
+    // The suite's server is started without an explicit lang, so this asserts the
+    // shipped default rather than a per-request override.
+    const zh = await get('/')
+    assert.ok(zh.body.includes('lang="zh"'), 'Chinese must be the default document language')
+    assert.ok(zh.body.includes('DSH Token 用量看板'))
+    for (const label of ['总览', '按模型', '按项目', '按会话', '时间分布', '调用明细', '缓存命中率']) {
+      assert.ok(zh.body.includes(label), `the Chinese dashboard must label "${label}"`)
+    }
+  })
+
+  it('lets ?lang override the default, so English stays reachable', async () => {
+    const en = await get('/?lang=en')
+    assert.ok(en.body.includes('lang="en"'))
+    assert.ok(en.body.includes('DSH token usage'))
+    assert.ok(en.body.includes('By model'))
+    // An unknown value falls back to the configured default rather than blanking.
+    const bogus = await get('/?lang=klingon')
+    assert.ok(bogus.body.includes('lang="zh"'))
+  })
+
+  it('localizes the text view too', async () => {
+    const zh = await get('/?view=text')
+    assert.ok(zh.body.includes('Token 用量报告'))
+    const en = await get('/?view=text&lang=en')
+    assert.ok(en.body.includes('Token usage report'))
   })
 
   it('exposes a health endpoint and a JSON report', async () => {
@@ -422,5 +448,67 @@ describe('standalone dashboard server', { skip: skipReason ?? false }, () => {
     } finally {
       rmSync(emptyRoot, { recursive: true, force: true })
     }
+  })
+})
+
+describe('page language', { skip: skipReason ?? false }, () => {
+  /** @type {string} */
+  let root
+  /** @type {any} */
+  let usageStats
+
+  before(async () => {
+    root = makeTempRoot('dsh-lang-test-')
+    writeCorpus(root)
+    const { UsageStatsService } = await import('../lib/host/service.js')
+    usageStats = new UsageStatsService(new Context(), { sessionsRoot: root })
+  })
+
+  after(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  /**
+   * Start a server with one language setting and read a path from it.
+   *
+   * @param {object} options server options.
+   * @param {string} path request path.
+   * @returns {Promise<string>} the response body.
+   */
+  async function fetchWith(options, path) {
+    const { startDashboardServer } = await import('../lib/host/server.js')
+    const server = await startDashboardServer(usageStats, { port: 0, ttlMs: 0, ...options })
+    try {
+      return await fetch(`http://127.0.0.1:${server.port}${path}`).then((response) => response.text())
+    } finally {
+      await server.close()
+    }
+  }
+
+  it('defaults to Chinese when no language is configured', async () => {
+    const body = await fetchWith({}, '/')
+    assert.ok(body.includes('lang="zh"'))
+    assert.ok(body.includes('<title>DSH Token 用量看板</title>'))
+  })
+
+  it('honors an explicit English default', async () => {
+    const body = await fetchWith({ lang: 'en' }, '/')
+    assert.ok(body.includes('lang="en"'))
+    assert.ok(body.includes('<title>DSH token usage</title>'))
+  })
+
+  it('lets the URL override either default', async () => {
+    assert.ok((await fetchWith({ lang: 'zh' }, '/?lang=en')).includes('lang="en"'))
+    assert.ok((await fetchWith({ lang: 'en' }, '/?lang=zh')).includes('lang="zh"'))
+  })
+
+  it('localizes the text view title', async () => {
+    assert.ok((await fetchWith({}, '/?view=text')).includes('DSH Token 用量报告'))
+    assert.ok((await fetchWith({}, '/?view=text&lang=en')).includes('DSH token usage'))
+  })
+
+  it('lets an explicit title win over the language default', async () => {
+    const body = await fetchWith({ title: '我的报表' }, '/')
+    assert.ok(body.includes('<title>我的报表</title>'))
   })
 })

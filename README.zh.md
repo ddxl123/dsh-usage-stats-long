@@ -71,6 +71,7 @@ dsh --profile web
     webPort: 3090         # 0 表示由系统分配；被占用时依次往后试
     webPortAttempts: 10
     webTtlMs: 10000       # 渲染结果的复用时长
+    webLang: 'zh'         # 页面默认语言；?lang=en 仍可覆盖
 ```
 
 可以在 `$DSH_HOME/cordis.patch.yml` 或 `--patch` 覆盖层中改这些值；patch 会替换整行 `config`，因此需要重述你需要的每一个键。
@@ -147,12 +148,14 @@ dsh-usage-stats filters --since 7d               # 打印解析后的筛选条�
 插件会**随 dsh 一起启动一个自己的看板服务**，页面就在它上面：
 
 ```
-http://127.0.0.1:3090/                 # 交互式看板
-http://127.0.0.1:3090/?lang=zh         # 中文界面
+http://127.0.0.1:3090/                 # 交互式看板（默认中文）
+http://127.0.0.1:3090/?lang=en         # 英文界面
 http://127.0.0.1:3090/?view=text       # 纯文本报告
 http://127.0.0.1:3090/report.json      # 整份报告 JSON
 http://127.0.0.1:3090/healthz          # 存活探针 + 引擎状态
 ```
+
+**页面默认就是中文**（`webLang: 'zh'`）—— 报表标签、时间分布和逐层下钻用中文读起来更顺。`?lang=en` 可以把单次请求切成英文，`webLang: 'en'` 则改整个部署的默认值；`?lang` 传了无法识别的值时回退到配置的默认语言，而不是渲染出一个没有标签的页面。
 
 之所以自己监听，而不是挂在 Harness 的 webserver 上：`ctx.webServer` 每个 context 只允许一个实现，而随附的 Web 组合已经占用了它；自己监听还让页面在完全没有 webserver 的部署里也能用。
 
